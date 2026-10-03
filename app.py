@@ -77,8 +77,7 @@ def indice_dominancia(cuotas):
         h_i = s_i^2 / IHH            (participación de la empresa i en el IHH)
         ID  = sum_i h_i^2
 
-    Rango: [1/n, 1]. Mide cuánto del IHH está explicado por las empresas
-    más grandes: crece cuando una o pocas empresas dominan el mercado.
+    Rango: [1/n, 1]. Crece cuando una o pocas empresas dominan el mercado.
     """
     s = validar_cuotas(cuotas)
     ihh = np.sum(s ** 2)
@@ -93,9 +92,8 @@ def indice_entropia(cuotas, normalizado=False):
         IE = sum_i s_i * ln(1 / s_i) = -sum_i s_i * ln(s_i)
 
     Convención: 0 * ln(0) = 0 (las cuotas nulas no aportan).
-    Rango: [0, ln(n)]. A diferencia de los demás, MENOR entropía implica
-    MAYOR concentración (IE = 0 es monopolio; IE = ln(n) es competencia
-    simétrica). Con normalizado=True se divide por ln(n) y queda en [0, 1].
+    Rango: [0, ln(n)]. MENOR entropía implica MAYOR concentración.
+    Con normalizado=True se divide por ln(n) y queda en [0, 1].
     """
     s = validar_cuotas(cuotas)
     positivas = s[s > 0]
@@ -118,26 +116,31 @@ def parsear_texto(texto):
 def main():
     st.set_page_config(page_title="Concentración de mercado", page_icon="📊")
     st.title("📊 Indicadores de concentración de mercado")
-    st.write("Calcula CR_k, IHH, Índice de Dominancia e Índice de Entropía "
-             "a partir de un vector de cuotas de mercado.")
+    st.write(
+        "Calcula CR_k, IHH, Índice de Dominancia e Índice de Entropía "
+        "a partir de un vector de cuotas de mercado."
+    )
 
-    modo = st.radio("Forma de ingreso de los datos",
-                    ["Escribir cuotas", "Tabla editable", "Cargar CSV"],
-                    horizontal=True)
+    modo = st.radio(
+        "Forma de ingreso de los datos",
+        ["Escribir cuotas", "Tabla editable", "Cargar CSV"],
+        horizontal=True,
+    )
 
     cuotas = None
     try:
         if modo == "Escribir cuotas":
             texto = st.text_area(
                 "Cuotas (separadas por coma, espacio o salto de línea)",
-                value="0.40, 0.25, 0.15, 0.10, 0.06, 0.04")
+                value="0.40, 0.25, 0.15, 0.10, 0.06, 0.04",
+            )
             cuotas = parsear_texto(texto)
 
         elif modo == "Tabla editable":
-            base = pd.DataFrame({"Empresa": ["A", "B", "C", "D"],
-                                 "Cuota": [0.40, 0.30, 0.20, 0.10]})
-            editada = st.data_editor(base, num_rows="dynamic",
-                                     use_container_width=True)
+            base = pd.DataFrame(
+                {"Empresa": ["A", "B", "C", "D"], "Cuota": [0.40, 0.30, 0.20, 0.10]}
+            )
+            editada = st.data_editor(base, num_rows="dynamic", use_container_width=True)
             cuotas = editada["Cuota"].dropna().tolist()
 
         else:
@@ -154,7 +157,7 @@ def main():
         if cuotas is None:
             st.stop()
 
-        # Opción para ingresar porcentajes o normalizar
+        # Opciones de preprocesamiento
         c1, c2 = st.columns(2)
         en_porcentaje = c1.checkbox("Los datos están en porcentaje (0-100)")
         normalizar = c2.checkbox("Normalizar para que sumen 1")
@@ -168,7 +171,49 @@ def main():
         validar_cuotas(s)  # lanza ValueError si hay problemas
 
         st.subheader("Parámetros")
-        k = st.slider("k para CR_k", min_value=1, max_value=len(s),
-                      value=min(4, len(s)))
+        k = st.slider(
+            "k para CR_k",
+            min_value=1,
+            max_value=max(len(s), 2),
+            value=min(4, len(s)),
+        )
         p1, p2 = st.columns(2)
-        ihh_10000 = p1.checkbox("Mostrar IHH en escala 0-10.000",
+        ihh_10000 = p1.checkbox("Mostrar IHH en escala 0-10.000", value=True)
+        ie_norm = p2.checkbox("Mostrar entropía normalizada [0, 1]")
+
+        st.subheader("Resultados")
+        m1, m2 = st.columns(2)
+        m3, m4 = st.columns(2)
+
+        ihh_valor = indice_hhi(s, escala_10000=ihh_10000)
+        ihh_texto = f"{ihh_valor:,.0f}" if ihh_10000 else f"{ihh_valor:.4f}"
+
+        m1.metric(f"CR_{min(k, len(s))}", f"{ratio_concentracion(s, min(k, len(s))):.4f}")
+        m2.metric("IHH", ihh_texto)
+        m3.metric("Índice de Dominancia", f"{indice_dominancia(s):.4f}")
+        m4.metric("Índice de Entropía", f"{indice_entropia(s, normalizado=ie_norm):.4f}")
+
+        st.caption("Nota: en la entropía, un valor más bajo indica mayor concentración.")
+
+        st.subheader("Distribución de cuotas")
+        orden = pd.Series(
+            np.sort(s)[::-1],
+            index=[f"#{i + 1}" for i in range(len(s))],
+        )
+        st.bar_chart(orden)
+
+        with st.expander("Ver CR_k para todos los k"):
+            tabla = pd.DataFrame(
+                {
+                    "k": range(1, len(s) + 1),
+                    "CR_k": [ratio_concentracion(s, j) for j in range(1, len(s) + 1)],
+                }
+            )
+            st.dataframe(tabla, hide_index=True, use_container_width=True)
+
+    except ValueError as e:
+        st.error(f"Error en los datos: {e}")
+
+
+if __name__ == "__main__":
+    main()
