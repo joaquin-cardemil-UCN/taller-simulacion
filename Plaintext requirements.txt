@@ -1,0 +1,6 @@
+Plaintext
+streamlit
+numpy
+pandas
+matplotlib
+scipy
